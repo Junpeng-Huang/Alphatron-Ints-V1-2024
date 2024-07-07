@@ -5,6 +5,7 @@
 #include "pins.h"
 #include "Camera.h"
 #include "vect.h"
+#include "PID.h"
 #include <Arduino.h>
 
 class Orbit {

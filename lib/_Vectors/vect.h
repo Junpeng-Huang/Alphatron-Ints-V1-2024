@@ -20,8 +20,8 @@ class Vect {
         Vect operator/(float scalar);
         void operator+=(Vect vector2);
         void operator-=(Vect vector2);
-        Vect operator*=(float scalar);
-        Vect operator/=(float scalar);
+        void operator*=(float scalar);
+        void operator/=(float scalar);
         bool operator==(Vect vector2);
         bool operator!=(Vect vector2);
         bool operator<(Vect vector2);

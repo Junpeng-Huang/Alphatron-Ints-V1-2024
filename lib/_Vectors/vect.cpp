@@ -48,12 +48,12 @@ void Vect::operator-=(Vect vector2){
     setStandard(i - vector2.i, j - vector2.j);
 }
 
-Vect Vect::operator*=(float scalar){
-    return Vect(mag * scalar, arg);
+void Vect::operator*=(float scalar){
+    setPolar(mag * scalar, arg);
 }
 
-Vect Vect::operator/=(float scalar){
-    return Vect(mag / scalar, arg);
+void Vect::operator/=(float scalar){
+    setPolar(mag / scalar, arg);
 }
 
 bool Vect::operator==(Vect vector2){

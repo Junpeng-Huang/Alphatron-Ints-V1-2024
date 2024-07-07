@@ -18,11 +18,13 @@ void Kicker::update()
             digitalWrite(KICKER_PIN, HIGH);
             this->kickCharge.resetTime();
             kicked = false;
+            kicking = false;
             Serial.println("not kickedddddddddddddddddddddddddddddddddddddd");
         }
     } else {
         if (this->kickCharge.timeHasPassedNoUpdate() && shouldKick){
             if (this->kickDelay.timeHasPassedNoUpdate()){
+                kicking = true;
                 digitalWrite(KICKER_PIN, LOW);
                 this->kickDischarge.resetTime();
                 kicked = true;

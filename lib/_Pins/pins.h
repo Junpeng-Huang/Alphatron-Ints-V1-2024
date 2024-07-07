@@ -44,6 +44,9 @@
 
 #define KICKER_PIN 34
 
+#define DRIBBLER_PWM 12
+#define CURRENT_PIN 22
+
 #define SUPERTEAM_PIN 22
 
 #endif

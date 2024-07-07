@@ -7,15 +7,14 @@
 class oAvoidance {
     public:
         struct Movement{
-            double speed;
-            double direction;
+            Vect lineAvoid;
         };
-        Movement moveDirection(double lineAngle);
+        Movement moveDirection(Vect line, bool lineVis);
         bool overLine = false;
         int botlocation;
     private:
-        double original_line;
-        double previous_line;
+        Vect original_line = Vect();
+        Vect previous_line = Vect();
 };
 
 #endif

@@ -12,7 +12,7 @@ void Camera::init() {
     Serial7.begin(CAMERA_BAUD);
 }
 
-void Camera::update(bool attackBlue, float heading) {
+void Camera::update(bool attackBlue) {
     if(Serial7.available() >= 8) {
         uint8_t firstByte = Serial7.read();
         uint8_t secondByte = Serial7.peek();
@@ -29,11 +29,11 @@ void Camera::update(bool attackBlue, float heading) {
             if(yellowAngle < 0){
                 yellowAngle += 360;
             }
-            yellowDist = sqrt(((240-yellowX-120)*(240-yellowX-120))+((240-yellowY-120)*(240-yellowY-120)));
+            yellowDist = goalPixeltoCM(sqrt(((240-yellowX-120)*(240-yellowX-120))+((240-yellowY-120)*(240-yellowY-120))));
             if (yellowDist != 0) {
                 attackBlue ? defendVis = true : attackVis = true;
                 yellowGoal = Vect(yellowDist, yellowAngle);
-                prevYellow = Vect(yellowDist, yellowAngle);
+                prevYellow = yellowGoal;
                 yellowTimer.resetTime();
             } else {
                 if (yellowTimer.timeHasPassedNoUpdate()){
@@ -54,11 +54,11 @@ void Camera::update(bool attackBlue, float heading) {
             if(blueAngle < 0){
                 blueAngle += 360;
             }
-            blueDist = sqrt(((240-blueX-120)*(240-blueX-120))+((240-blueY-120)*(240-blueY-120)));
+            blueDist = goalPixeltoCM(sqrt(((240-blueX-120)*(240-blueX-120))+((240-blueY-120)*(240-blueY-120))));
             if (blueDist != 0) {
                 attackBlue ? attackVis = true : defendVis = true;
                 blueGoal = Vect(blueDist, blueAngle);
-                prevBlue = Vect(blueDist, blueAngle);
+                prevBlue = blueGoal;
                 blueTimer.resetTime();
             } else {
                 if (blueTimer.timeHasPassedNoUpdate()){
@@ -81,13 +81,13 @@ void Camera::update(bool attackBlue, float heading) {
             if (ballDist != 0.00) {
                 ballVisible = true;
                 ball = Vect(ballDist, ballDir);
-                prevBall = Vect(ballDist, ballDir);
+                prevBall = ball;
                 ballTimer.resetTime();
                 // Serial.println("Visible");
             } else {
                 if (ballTimer.timeHasPassedNoUpdate()){
                     ballVisible = false;
-                    ball = Vect(0, 0);
+                    ball =  Vect(0, 0);
                     // Serial.println("Not Visible");
                 } else {
                     ball = prevBall;
@@ -95,10 +95,12 @@ void Camera::update(bool attackBlue, float heading) {
                     // Serial.println("Delay Tracking");
                 }
             }
-
+            
             attackGoal = (attackBlue ? blueGoal : yellowGoal);
             defendGoal = (attackBlue ? yellowGoal : blueGoal);
-            inCapture = ((ball.arg > 360-ORBIT_STRIKE_ANGLE || ball.arg < ORBIT_STRIKE_ANGLE) && ball.mag < CAPTURE_DIST && ballVisible ? true : false);
+            inCapture = ((ball.arg > 360-ORBIT_STRIKE_ANGLE-2.5 || ball.arg < ORBIT_STRIKE_ANGLE + 2.5) && ball.mag < CAPTURE_DIST + 3 && ballVisible ? true : false);
+            kickCond = ((ball.arg > 360-ORBIT_STRIKE_ANGLE || ball.arg < ORBIT_STRIKE_ANGLE) && ball.mag < CAPTURE_DIST && ballVisible ? true : false);
+            cameraLock = ((ball.arg > 270 || ball.arg < 90) && ball.mag < DIST_BEHIND_BALL && ballVisible ? true : false);
         }
     }
 }
@@ -108,5 +110,5 @@ float Camera::ballPixeltoCM(float dist){
 }
 
 float Camera::goalPixeltoCM(float dist){
-    return (dist != 0) ? 5.7478f * powf(10.0f, -13.0f) * expf(0.0494379*(dist + 552.825f)) + 13.8327f : 0;
+    return (dist != 0) ? (ROBOT == 1 ? 0.0129052 * expf(0.0494145 * (dist + 80.9429)) + 1.3936 : 67106511.6727 * expf(0.0492942 * dist - 18.5475) - 0.591117831341) : 0;
 }

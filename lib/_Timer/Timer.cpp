@@ -11,7 +11,7 @@ void Timer::resetTime() {
 
 bool Timer::timeHasPassed() {
     if (micros() - lastUpdate > timerDuration) {
-        update();
+        resetTime();
         return true;
     }
 

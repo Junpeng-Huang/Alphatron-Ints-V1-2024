@@ -9,21 +9,17 @@ class Camera {
 public:
     Camera();
     void init();
-    void update(bool attackBlue, float heading);
+    void update(bool attackBlue);
     float calculateAngleAddition();
     Vect attackGoal;
     Vect defendGoal;
-    int yellowAngle;
-    int yellowDist;
-    int blueAngle;
-    int blueDist;
     float ballDir;
-    float ballDirCW;
-    float ballStr;
     bool defendVis;
     bool attackVis;
     bool ballVisible;
     bool inCapture;
+    bool kickCond;
+    bool cameraLock;
     float ballDist;
     Vect ball;
 
@@ -36,6 +32,10 @@ private:
     float prevDistB;
     float prevAngBall;
     float prevDistBall;
+    float yellowAngle;
+    float yellowDist;
+    float blueAngle;
+    float blueDist;
     Vect blueGoal;
     Vect prevBlue;
     Vect yellowGoal;

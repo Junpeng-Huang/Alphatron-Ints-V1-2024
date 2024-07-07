@@ -14,6 +14,9 @@
 #include "time.h"
 #include "kicker.h"
 #include "Bluetooth.h"
+#include "LRF.h"
+#include "Servo.h"
+#include "ESC.h"
 #include <Wire.h>
 
 using namespace bon;
@@ -25,77 +28,67 @@ oAvoidance outAvoidance;
 Camera camera;
 Kicker kicker;
 Bluetooth bluetooth;
+LRF lrf;
+Servo servo;
 Timer surgeTimer = Timer((unsigned long)SURGE_MAX_TIME);
-// Timer visTimer = Timer((unsigned long)VIS_TIMER);
+Timer idleTimer = Timer((unsigned long)IDLE_TIMER);
+Timer searchTimer = Timer((unsigned long)SEARCH_TIMER);
 
 Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28, &Wire);
 PID pid = PID(COMPASS_P, COMPASS_I, COMPASS_D, 100);
-PID cameraPid = PID(CAMERA_P, CAMERA_I, CAMERA_D, 30);
-PID sidewayPid = PID(SIDEWAY_P, SIDEWAY_I, SIDEWAY_D);
-PID forwardPid = PID(forward_P, forward_I, forward_D);
-PID centrePid = PID(centre_P, centre_I, centre_D);
-PID defendPid = PID(defend_P, defend_I, defend_D, 50);
+PID cameraPid = PID(CAMERA_P, CAMERA_I, CAMERA_D, 100);
+PID defendPid = PID(DEFEND_P, DEFEND_I, DEFEND_D);
+PID sidewayPid = PID(SIDEWAY_P, SIDEWAY_I, SIDEWAY_D, ORBIT_FAR_SPEED);
+PID linePid = PID(LINE_P/10, LINE_I, LINE_D);
+PID lineWidthPid = PID(LINE_P/5, LINE_I, LINE_D);
+PID fieldPid = PID(FIELD_P, FIELD_I, FIELD_D);
+PID searchPid = PID(SEARCH_P, SEARCH_I, SEARCH_D);
+ESC myESC (DRIBBLER_PWM, SPEED_MIN, SPEED_MAX, 500);                 // ESC_Name (ESC PIN, Minimum Value, Maximum Value, Default Speed, Arm Value)
 
 struct Move
 {
 	Vect moveVect;
-	Vect prevVect;
-	int rot;
 };
 
 int counter = 0;
 int bnoCtr = 0;
+int oESC;
+int stratNum;
 bool surge = false;
-Vect rest = Vect (0, 0);
-Vect prevVect;
-float prevballarg;
+bool forwardsSearch = true;
+bool oneWaySearch = false; //One way is right
+float confidenceLvl;
+bool strategies = true;
+float attackGoalX = 0;
+float attackGoalY = 0;
+float defendGoalX = 0;
+float defendGoalY = 0;
+float robotX = 0;
+float robotY = 0;
+bool inPosition = false;
+const int numLoops = 50;
+Vect ballPositions[numLoops];
+unsigned long times[numLoops];
+Vect velocityReadings[numLoops];
+int currentIndex = 0;
+bool initialized = false;
+Vect ballVelocity;
+Vect robot = Vect();
 
-int compass_correct(float targetHeading = 0)
+int compass_correct(float targetHeading)
 {
 	sensors_event_t event;
 	bno.getEvent(&event);
 	float orient = (float)event.orientation.x;
-	if (orient > 180)
-	{
+	if (orient > 180) {
 		orient -= 360;
 	}
-	if (targetHeading > 180)
-	{
+	if (targetHeading > 180) {
 		targetHeading = targetHeading - 360;
 	}
+	// Serial.println(targetHeading);
 
 	return pid.update(orient, targetHeading);
-}
-
-int sideways_correct(float orient = camera.ballDir, float targetHeading = 0)
-{
-	if (orient > 180)
-	{
-		orient -= 360;
-	}
-	orient *= -1;
-	return sidewayPid.update(orient, targetHeading);
-}
-
-float centre_correct(float targetHeading = float(event.orientation.x))
-{
-	float orient = camera.defendGoal.arg*sin(DEG2RAD*camera.defendGoal.mag);
-	// Serial.println(orient);
-	if (targetHeading > 180)
-	{
-		targetHeading = targetHeading - 360;
-	}
-	targetHeading = targetHeading*-1;
-	return centrePid.update(orient, targetHeading);
-}
-
-int forwards_correct()
-{
-	float targetDist = DEFEND_DIST; //Maybe turn down the P...
-
-	int currentDist = camera.defendGoal.mag;
-
-	return forwardPid.update(currentDist, targetDist);
 }
 
 int defend_correct(float targetHeading = 180)
@@ -108,109 +101,268 @@ int defend_correct(float targetHeading = 180)
 int camera_correct(float targetHeading = 0)
 {
 	float orient = camera.attackGoal.arg;
-	if (orient > 180)
-	{
+	if (orient > 180) {
 		orient = orient - 360;
 	}
-	if (targetHeading > 180)
-	{
+	if (targetHeading > 180) {
 		targetHeading = targetHeading - 360;
 	}
 
 	return cameraPid.update(orient, targetHeading);
 }
 
-Move attack(Vect ball, bool ballVis, double outDir, double outSpd, double lineAngle, double heading, bool captured){
+int ball_correct(float targetHeading = camera.ball.arg)
+{
+	sensors_event_t event;
+	bno.getEvent(&event);
+	float orient = (float)event.orientation.x;
+	if (orient > 180) {
+		orient = orient - 360;
+	}
+	if (targetHeading > 180) {
+		targetHeading = targetHeading - 360;
+	}
+	constrain(targetHeading, -90, 90);
+
+	return cameraPid.update(orient, targetHeading);
+}
+
+void dribble() {
+	int current = analogRead(CURRENT_PIN);
+	if (current > 530 || kicker.kicking) {
+		myESC.speed(1000);
+	} else {
+		myESC.speed(1000 + constrain(600/camera.ball.mag + (camera.ball.arg > 180 ? camera.ball.arg - 180 : 180 - camera.ball.arg)/2, 0, 175));
+	}
+}
+
+void localisation(float heading) {
+	Vect attackGoal = Vect(camera.attackGoal.mag, (camera.attackGoal.arg - heading));
+	Vect defendGoal = Vect(camera.defendGoal.mag, (camera.defendGoal.arg - heading));
+    float attackGoalX = camera.attackGoal.exists() ? attackGoal.j : defendGoalX;
+    float attackGoalY = camera.attackGoal.exists() ? 100 - attackGoal.i : defendGoalY;
+    float attackProx = abs((FIELD_LENGTH - 9)/2 - attackGoal.i);
+    float defendGoalX = camera.defendGoal.exists() ? defendGoal.j : attackGoalX;
+    float defendGoalY = camera.defendGoal.exists() ? -defendGoal.i - 100 : attackGoalY;
+    float defendProx = abs((FIELD_LENGTH - 9)/2 + defendGoal.i);
+
+    float cameraConfidence = (camera.attackGoal.exists() + camera.defendGoal.exists())/2;
+    float LRFConfidence = Vect(lrf.bestPosX, lrf.bestPosY).exists() ? constrain((((1/5)*lrf.bestCntX - 1/5) + ((1/3)*lrf.bestCntY - 1/3)), 0, 2) : 0;
+    // cameraConfidence + LRFConfidence > 1.5 ? strategies = true : strategies = false;
+	if (cameraConfidence + LRFConfidence != 0) {
+		robotX = (cameraConfidence*(attackGoalX*attackProx + defendGoalX*defendProx)/(attackProx + defendProx) + lrf.bestPosX*LRFConfidence)/(cameraConfidence + LRFConfidence);
+    	robotY = (cameraConfidence*(attackGoalY*attackProx + defendGoalY*defendProx)/(attackProx + defendProx) + lrf.bestPosX*LRFConfidence)/(cameraConfidence + LRFConfidence);
+	}
+    robot = (cameraConfidence + LRFConfidence != 0) ? Vect(robotX, robotY, false) : Vect();
+}
+
+
+void velocity() {
+    Vect ballCurrentPosition = camera.ball;
+    unsigned long currentTime = micros();
+    if (initialized) {
+        int prevIndex = (currentIndex + 1)%numLoops;
+        Vect previousBallPosition = ballPositions[prevIndex];
+        unsigned long previousTime = times[prevIndex];
+        float dt = (currentTime - previousTime);
+        if (dt != 0) {
+            Vect ds = ballCurrentPosition - previousBallPosition;
+            Vect currentVelocity = ds*100000/dt;
+            velocityReadings[currentIndex] = currentVelocity;
+            Vect avgVelocity = Vect();
+            for (int i = 0; i < numLoops; i++) {
+                avgVelocity = avgVelocity + velocityReadings[i];
+            }
+            ballVelocity = avgVelocity/numLoops;
+        }
+    } else {
+        velocityReadings[currentIndex] = Vect();
+    }
+
+    ballPositions[currentIndex] = ballCurrentPosition;
+    times[currentIndex] = currentTime;
+    currentIndex = (currentIndex + 1)%numLoops;
+    if (currentIndex == 0 && !initialized) {
+        initialized = true;
+    }
+}
+
+Vect adjustMovementVector(Vect currentPosition, Vect moveVect) {
+	Vect projectedPos = currentPosition + moveVect;
+    if (projectedPos.i > LINE_LOC_X) {
+        moveVect = moveVect*((LINE_LOC_X - currentPosition.i)/moveVect.i);
+    } else if (projectedPos.i < -LINE_LOC_X) {
+        moveVect = moveVect*((-LINE_LOC_X - currentPosition.i)/moveVect.i);
+    }
+
+    if (projectedPos.j > LINE_LOC_Y) {
+        moveVect = moveVect*((LINE_LOC_Y - currentPosition.j)/moveVect.j);
+    } else if (projectedPos.j < -LINE_LOC_Y) {
+        moveVect = moveVect*((-LINE_LOC_Y - currentPosition.j)/moveVect.j);
+    }
+	moveVect = Vect(max(moveVect.mag, 50), moveVect.arg);
+    return moveVect;
+}
+
+Vect gotoPos(Vect currentPosition, Vect targetPos) {
+	Vect moveVect = targetPos - Vect(currentPosition.mag, floatMod(90 - currentPosition.arg, 360));
+	
+	return moveVect;
+}
+
+
+Move attack(Vect ball, bool ballVis, double heading, bool captured){
 	Move movement;
 	Orbit::OrbitData orbitData = orbit.update(camera.ball);
-	if (lineAngle != -1 || outAvoidance.botlocation == -1){
-		if (outAvoidance.botlocation >= 0 && (floatMod(360 - ball.arg, 360) < lineAngle - 90 || floatMod(360 - ball.arg, 360) > lineAngle + 90) && ballVis){
-			movement.moveVect = Vect(orbitData.ball);
-		} else {
-			movement.moveVect = Vect(outSpd, outDir);
-		}
-	} else {
-		if (ballVis) {
-			if (captured && camera.attackVis) {
-				movement.moveVect = Vect(STRIKE_SPEED, floatMod(360 - camera.attackGoal.arg, 360));
-				// if (camera.attackGoal.arg < SHOOT_ANGLE || 360 - camera.attackGoal.arg > SHOOT_ANGLE) {
-				// 	kicker.shouldKick = true;
-	 			// 	kicker.kickDelay.resetTime();
-				// }
+
+	if ((camera.attackGoal.mag - camera.defendGoal.mag) < 30 && forwardsSearch) {
+		forwardsSearch = false;
+	} else if (!angleIsInside(60, 125, lightsensor.line.arg) && !angleIsInside(235, 300, lightsensor.line.arg) && lightsensor.onLine) {
+		forwardsSearch = true;
+	}
+
+	switch (stratNum){
+    case 0: //First instance losing ball
+        if (!ballVis){ 
+			if (idleTimer.timeHasPassedNoUpdate() &&  camera.defendGoal.exists() && camera.attackGoal.exists()) {
+				stratNum = -1;
 			} else {
-				movement.moveVect = Vect(orbitData.ball);
+				if (camera.defendVis){
+					movement.moveVect = (Vect(camera.defendGoal.mag, floatMod(360 - camera.defendGoal.arg, 360)) + Vect(DEFEND_DIST + 20, 0))*2.5;
+				} else {
+					movement.moveVect = Vect(HOMING_SPEED, 180);
+				}
+				stratNum = 0;
+				searchTimer.resetTime();
 			}
 		} else {
-			// if (camera.defendVis){
-			// 	if (camera.defendGoal.mag < DEFEND_DIST) {
-			// 		movement.moveVect = Vect(HOMING_SPEED, camera.attackVis ? camera.attackGoal.arg : 0);
-			// 	} else if (camera.defendGoal.mag > DEFEND_DIST + 5){
-			// 		movement.moveVect = Vect(HOMING_SPEED, floatMod(360 - camera.defendGoal.arg, 360));
-			// 	} else {
-			// 		movement.moveVect = rest;
-			// 	}
-			// } else {
-			// 	movement.moveVect = Vect(HOMING_SPEED, 180);
-			// }
-			movement.moveVect = rest;
+			stratNum = 1;
 		}
-	}
+		break;
+    case 1: //Orbit attack
+		if (ballVis && camera.attackGoal.exists()) {
+			if (angleIsInside(90, 270, floatMod(ball.arg + heading, 360)) && strategies) {
+				stratNum = 2;
+			} else {
+				if (captured && camera.attackGoal.exists()) {
+					movement.moveVect = Vect(orbitData.ball.mag, floatMod(360 - camera.attackGoal.arg, 360));
+					if (camera.attackGoal.arg < 180 ? camera.attackGoal.arg < SHOOT_ANGLE : 360 - camera.attackGoal.arg < SHOOT_ANGLE && camera.kickCond) {
+						kicker.shouldKick = true;
+						kicker.kickDelay.resetTime();
+					}
+				} else {
+					movement.moveVect = Vect(orbitData.ball);
+				}
+				idleTimer.resetTime();
+				stratNum = 1;
+			}
+		} else {
+			stratNum = 0;
+		}
+		break;
+	case 2: //Sidelines Dribbling
+		if (ballVis) {
+			if (strategies && camera.attackGoal.exists()) {
+				if (captured && lightsensor.onLine) {
+					if (camera.attackGoal.arg < 180 ? camera.attackGoal.arg < SHOOT_ANGLE : 360 - camera.attackGoal.arg < SHOOT_ANGLE && camera.attackGoal.mag < 50) {
+						kicker.shouldKick = true;
+						kicker.kickDelay.resetTime();
+					} else {
+						movement.moveVect = Vect(orbitData.ball) + Vect(ORBIT_FAR_SPEED, 0);
+					}
+				} else {
+					movement.moveVect = Vect(orbitData.ball);
+				}
+				idleTimer.resetTime();
+			} else {
+				stratNum = 1;
+			}
+		} else {
+			stratNum = 0;
+		}
+		break;
+	case -1: //Search algorithm
+		if (ballVis) {
+			stratNum = 1;
+		} else {
+			if (searchTimer.timeHasPassedNoUpdate()){
+				idleTimer.resetTime();
+				stratNum = 0;
+			} else {
+				if (!lightsensor.onLine && outAvoidance.botlocation != -1) {
+					movement.moveVect = Vect(oneWaySearch ? max(-fieldPid.update(camera.defendGoal.arg < 180 ? camera.defendGoal.arg : camera.defendGoal.arg - 360, 0), 0) : -fieldPid.update(camera.defendGoal.arg < 180 ? camera.defendGoal.arg : camera.defendGoal.arg - 360, 0), 90);
+				} else {
+					if (forwardsSearch) {
+						movement.moveVect = Vect(ORBIT_FAR_SPEED, 0) + Vect(-fieldPid.update(camera.defendGoal.arg < 180 ? camera.defendGoal.arg : camera.defendGoal.arg - 360, 0), 90);
+					} else if (!forwardsSearch) {
+						movement.moveVect = Vect(ORBIT_FAR_SPEED, 180) + Vect(-fieldPid.update(camera.defendGoal.arg < 180 ? camera.defendGoal.arg : camera.defendGoal.arg - 360, 0), 90);
+					} else {
+						movement.moveVect = Vect();
+					}
+				}
+				stratNum = -1;
+			}
+		}
+		break;
+    default: 
+        stratNum = 0;
+        break;
+    }	
 	return movement;
 }
 
-Move defend(Vect ball, bool ballVis, double outDir, double outSpd, bool defendVis, Vect goal, double lineAngle, double heading) {
+Move defend(Vect ball, bool ballVis, bool defendVis, Vect goal, double defendDist, double lineWidth, double heading) {
 	Move move;
 	bnoCtr++;
 	if(bnoCtr % 5 == 0) {
 		bno.getEvent(&event);
 	}
 
-	if (ball.mag <= DEFENSE_SURGE_STRENGTH && (camera.ballDir < 10 || camera.ballDir > 350) && goal.mag < DEFEND_DIST+5){
+	if (ball.exists() && ball.mag <= DEFENSE_SURGE_STRENGTH && (ball.arg < ORBIT_STRIKE_ANGLE*2 || ball.arg > 360 - ORBIT_STRIKE_ANGLE*2) && goal.mag < defendDist + 5){
 		surge = true;
 		surgeTimer.resetTime();	
-	} else if (surge && goal.mag > DEFEND_DIST+15){
+	} else if (surge && (camera.attackGoal.mag < camera.defendGoal.mag)){
 		surge = false;
 	} else if (surgeTimer.timeHasPassedNoUpdate()){
 		surge = false;
 	}
-
+	
+	Orbit::OrbitData orbitData = orbit.update(camera.ball);
 	Vect g = Vect(goal.mag, floatMod(360 - (goal.arg - heading), 360));
-	Vect m = g - Vect(DEFEND_DIST*cosf(DEG2RAD*(g.arg + (ball.arg > 180 ? -2 : 2))), DEFEND_DIST*sinf(DEG2RAD*(g.arg + (ball.arg > 180 ? -2 : 2))), false);
-	Vect c = g - Vect(DEFEND_DIST*cosf(DEG2RAD*(g.arg)), DEFEND_DIST*sinf(DEG2RAD*(g.arg)), false);
-	Vect centre = g + Vect(DEFEND_DIST, 0);
+	Vect b = Vect(ball.mag, floatMod(ball.arg + heading - 180, 360));
+	Vect c = g - Vect(defendDist*cosf(DEG2RAD*(g.arg)), DEFEND_DIST*sinf(DEG2RAD*(g.arg)), false);
+	float swdc = constrain(c.mag*2, 15, 30);
+	// Vect interceptionPoint = calculateInterceptionPoint(g, b, ballVelocity, defendDist);
+	Vect m = g - Vect(defendDist*cosf(DEG2RAD*(g.arg + (ball.arg > 180 ? -swdc*2 : swdc*2))), DEFEND_DIST*sinf(DEG2RAD*(g.arg + (ball.arg > 180 ? -swdc : swdc))), false);
+	Vect centre = g + Vect(defendDist, 0);
 
-	if(goal.mag < DEFEND_DIST + 5){ //Calibration 
-		if(outDir == -1 && outAvoidance.botlocation != -1){
-			if(defendVis && ballVis){
-				if (surge){
-					move.moveVect = Vect(DEFENSE_SUGRE_SPEED, ball.arg + heading);
-				} else {
-					move.moveVect = Vect((ball.arg > 180 ? 360 - ball.arg : ball.arg), m.arg); //Try vector equation cosx i + sinx j
-					move.prevVect = move.moveVect;
-				}
-				// Serial.println("Defending");
-			} else {
-				move.moveVect = Vect(powf(centre.mag, 1.1), centre.arg);
-				// Serial.println(move.moveVect.arg);
+	if (goal.exists()) {
+		if (surge) {
+			move.moveVect = Vect(STRIKE_SPEED, orbitData.ball.arg);
+			if (camera.inCapture && (camera.attackGoal.arg < 180 ? camera.attackGoal.arg < SHOOT_ANGLE : 360 - camera.attackGoal.arg < SHOOT_ANGLE) && camera.attackGoal.exists()) {
+				kicker.shouldKick = true;
+				kicker.kickDelay.resetTime();
 			}
+		} else if ((lightsensor.onLine || outAvoidance.botlocation == -1) && goal.mag < defendDist + 5){ //Calibration 
+			if(ballVis){
+				if (angleIsInside(150, 210, ball.arg) && ball.mag < 20 && defendDist + 2.5) {
+                	move.moveVect = Vect((ball.arg > 180 ? ball.arg - 180 : 180 - ball.arg), m.arg) + (!lightsensor.onLine && outAvoidance.botlocation != -1 ? Vect() : Vect(lineWidthPid.update(lineWidth, 1), g.arg));
+				} else {
+					move.moveVect = Vect((ball.arg > 180 ? 1 : -1)*sidewayPid.update(b.arg, g.arg), m.arg) + (!lightsensor.onLine && outAvoidance.botlocation != -1 ? Vect() : Vect(lineWidthPid.update(lineWidth, 1), g.arg));
+				}
+			} else {
+				move.moveVect = Vect(centre.mag*3, centre.arg) + (lightsensor.onLine ? Vect(lineWidthPid.update(lineWidth, 1), g.arg) : Vect());
+			}
+    	} else if (ballVis && angleIsInside(90, 270, ball.arg) && angleIsInside(120, 240, g.arg)){
+			move.moveVect = Vect(orbitData.ball);
 		} else {
-			move.moveVect = Vect(outSpd, outDir);
+			move.moveVect = Vect(c.mag*4, c.arg);
 		}
-    } else if (ballVis && ball.arg > 90 && ball.arg < 270){
-		Orbit::OrbitData orbitData = orbit.update(camera.ball);
-		move.moveVect = Vect(orbitData.ball);
 	} else {
-		if (defendVis) {
-			move.moveVect = Vect(c.mag*DEF_MULT, c.arg);
-			// Serial.println("Homing");
-			Serial.println(move.moveVect.mag);
-		} else {
-			move.moveVect = Vect(HOMING_SPEED, 180);
-		}
+		move.moveVect = Vect(HOMING_SPEED, 180);		
 	}
 	return move;
 }
-
 
 void setup()
 {
@@ -221,13 +373,24 @@ void setup()
 	Wire.begin();
 	bno.begin();
 	kicker.init();
-	// bluetooth.init();
+	bluetooth.init();
+	// lrf.init();
 	if (!bno.begin(bno.OPERATION_MODE_IMUPLUS)) {
 		Serial.println("Error connecting to bno");
 		while(1);
 	}
 	bno.setExtCrystalUse(true);
-	delay(500);
+	// delay(500);
+	// pinMode(CURRENT_PIN, INPUT);
+	// myESC.arm();
+	// delay(7000);
+	// for (oESC = SPEED_MIN; oESC <= SPEED_MAX; oESC += 1) {  
+	// 	myESC.speed(oESC);                                    
+	// 	delay(10);
+	// } for (oESC = SPEED_MAX; oESC >= SPEED_MIN; oESC -= 1) {  
+    // 	myESC.speed(oESC);                                    
+    // 	delay(10);                                            
+   	// }                                         
 	Serial.println("Done");
 }
 
@@ -237,70 +400,46 @@ void loop()
 	if(bnoCtr % 5 == 0) {
 		bno.getEvent(&event);
 	}
-	float ol = lightsensor.update();
 	float orient = ((float)event.orientation.x);
 	if (orient > 180){
-		orient = orient -360;
+		orient = orient - 360;
 	}
-  	float lineAngle = (ol != -1 ? floatMod(ol-orient, 360) : -1.00);
-  	oAvoidance::Movement outavoidance = outAvoidance.moveDirection(lineAngle);
-  	outavoidance.direction = (outavoidance.direction != -1 ? -1* (floatMod(outavoidance.direction, 360)) + 360 : -1.00);
-	camera.update(blueAttack == false, orient);
-	// // bluetooth.update(camera.ballStr);
+	lightsensor.update();
+	// 	lrf.update(orient);
+	camera.update(blueAttack == false);
+	localisation(orient);
+	velocity();
+	bluetooth.update(camera.ball.i, camera.ball.j, robot.i, robot.j);
+	float defendDist = DEFEND_DIST + abs(180 - (camera.defendGoal.arg - orient))/4;
+	Vect line = (lightsensor.onLine ? Vect(lightsensor.line.mag, floatMod(lightsensor.line.arg - orient - 90, 360)) : Vect());
+  	oAvoidance::Movement outavoidance = outAvoidance.moveDirection(line, lightsensor.onLine);
+	Vect lineVect = ((lightsensor.onLine || outAvoidance.botlocation == -1) ? Vect(max(-linePid.update(outavoidance.lineAvoid.mag, 0), 0), -1*(floatMod(outavoidance.lineAvoid.arg, 360)) + 360) : Vect());
+	// dribble();
 
-	if (ROBOT == 2) {	// -- Attacking -- 
-		Move att = attack(camera.ball, camera.ballVisible, outavoidance.direction, outavoidance.speed, lineAngle, orient, camera.inCapture);
-		motors.move(att.moveVect, camera.inCapture ? camera_correct() : compass_correct(), orient);
-		// Serial.println(att.moveVect.arg);
-	} else {	// -- Defending --
-		Move def = defend(camera.ball, camera.ballVisible, outavoidance.direction, outavoidance.speed, camera.defendVis, camera.defendGoal, lineAngle, orient);
-		if (lineAngle != -1 || outAvoidance.botlocation == -1){
-			motors.move(Vect(outavoidance.speed, outavoidance.direction), (camera.defendGoal.mag > DEFEND_DIST + 5 ? compass_correct() : defend_correct()), orient);
-		} else {
-			if (def.moveVect.mag > 0 || def.moveVect.arg > 0) {
-				motors.move(Vect(def.moveVect), (camera.defendGoal.mag > DEFEND_DIST + 5 ? compass_correct() : defend_correct()), orient);
-				// Serial.println(camera.ball.mag);
-			} else {
-				motors.move(rest, defend_correct(), orient);
-			}
-		}
-	}
+	if (ROBOT == 2) {	// -- Attacking -- // bluetooth.thisData.role == ATTACK_MODE
+		Move att = attack(camera.ball, camera.ballVisible, orient, camera.inCapture);
+		motors.move(adjustMovementVector(Vect(robot), att.moveVect) + lineVect, (camera.inCapture && camera.attackGoal.mag < 50) ? camera_correct() : compass_correct(floatMod(camera.ball.arg + orient, 360) > 180 ? 270 : 90), lineVect == Vect() ? 0 : orient);
+	} else {	// -- Defending -- //
+		Move def = defend(camera.ball, camera.ballVisible, camera.defendVis, camera.defendGoal, defendDist, outavoidance.lineAvoid.mag, orient);
+		motors.move(def.moveVect + lineVect, camera.inCapture ? camera_correct() : defend_correct(), orient);
 
-	kicker.update();
+	} 
+	// kicker.update(); 
 
-	//- Testing -//
-
-	// Serial.println(digitalRead(SUPERTEAM_PIN));
-	// bno.getEvent(&event);
-	// Serial.println(event.orientation.x);
-	// motors.move(40, 0, compass_correct());
-	// if (camera.ballStrSurgeAvg > 180){
-	// Serial.println(camera.ballDist);
-	// }
-	// if (camera.ballStrAvg > 160){ 
-	// Serial.println(camera.ballDir);
-	// }
-	// Serial.println(camera.ballDir);
-	// if (camera.attackAngle != 0){
-	// }
-	// Serial.println(event.orientation.x-camera.defendAngle);
-	// Serial.println(camera.defendGoal.arg); //, camera.ballStrAvg, camera.ballVisible, outavoidance.direction, outavoidance.speed, camera.defendVis, camera.defendDist, lineAngle, orient
-
-	// lightsensor.test();
-	// Serial.println(outAvoidance.botlocation);
+	////--- Testing ---////
 	// Serial.println(camera.ball.arg);
-	// motors.move(outavoidance.speed, outavoidance.direction,compass_correct());
-	// motors.move(0, 0, compass_correct());
-
-	//- Kicker -//
-
-	// digitalWrite(KICKER_PIN,HIGH);
-	// delay(5000);
-	// digitalWrite(KICKER_PIN,LOW);
-	// Serial.println("LOW");
-	// delay(50);
-	// digitalWrite(KICKER_PIN,HIGH);
-	// delay(5000);
-	// Serial.println(floatMod(camera.yellowAngle*-1, 360));
-	// Serial.println(camera.ball.mag);
+	// Serial.println(outavoidance.speed);
+	// Serial.println(camera.defendGoal.mag);
+	// Vect line = Vect(lightsensor.lineDir == -1 && outAvoidance.botlocation != -1 ? 0 : lineWidthPid.update(outavoidance.speed, 1), floatMod(360 - (camera.defendGoal.arg - orient), 360)) + lineVect;
+	// lightsensor.debug();
+	// Serial.print("\t");
+	// Serial.print(line.mag);
+	// Serial.print("\t");
+	// Serial.println(lightsensor.lineDir);
+	// motors.move(def.moveVect, defend_correct(), orient);
+	// Serial.print("\t");
+	// Serial.println(line.arg);
+	// Serial.print(def.moveVect.mag);
+	// Serial.print("\t");
+	// Serial.println(def.moveVect.arg);
 }

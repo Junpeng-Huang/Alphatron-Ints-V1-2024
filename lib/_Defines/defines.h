@@ -9,77 +9,50 @@
 #define RAD2DEG (180/3.141592)
 #define MOTOR_NO 4
 
-#define ROBOT 2
-#define ORBIT_FAR_SPEED (ROBOT == 1 ? 200 : 120)
-#define ORBIT_CLOSE_SPEED (ROBOT == 1 ? 180 : 60)
-#define ORBIT_STRIKE_ANGLE (ROBOT == 1 ? 5 : 15)
-#define BALL_OFFSET (ROBOT == 1 ? 5.0 : -3.0)
-#define CAPTURE_DIST (ROBOT == 1 ? 5 : 15)
-#define DIST_BEHIND_BALL (ROBOT == 1 ? 20 : 25)
-#define STRIKE_SPEED (ROBOT == 1 ? 250 : 120)
-#define HOMING_SPEED (ROBOT == 1 ? 50 : 100)
+#define ROBOT 1
+#define ORBIT_FAR_SPEED (ROBOT == 1 ? 100 : 80)
+#define ORBIT_CLOSE_SPEED (ROBOT == 1 ? 30 : 30)
+#define CAPTURE_SPEED (ROBOT == 1 ? 25 : 30)
+#define ORBIT_STRIKE_ANGLE (ROBOT == 1 ? 5 : 10) 
+#define CAPTURE_DIST (ROBOT == 1 ? 7 : 9)
+#define DIST_BEHIND_BALL (ROBOT == 1 ? 25 : 25)
+#define STRIKE_SPEED ORBIT_FAR_SPEED
+#define HOMING_SPEED (ROBOT == 1 ? 80 : 80)
 
 #define COMPASS_P (ROBOT == 1 ? 1.5 : 1.5) 
 #define COMPASS_I (ROBOT == 1 ? 0 : 0)
-#define COMPASS_D (ROBOT == 1 ? 0 : 0.15)
+#define COMPASS_D (ROBOT == 1 ? 0.1 : 0.1)
 
-#define CAMERA_P (ROBOT == 1 ? 1.2 : 0.5) 
+#define CAMERA_P (ROBOT == 1 ? 0.45 : 0.45) 
 #define CAMERA_I (ROBOT == 1 ? 0 : 0)
-#define CAMERA_D (ROBOT == 1 ? 0.07 : 0) //No D
+#define CAMERA_D (ROBOT == 1 ? 0.15 : 0.1) //No D
 
-#define centre_P (ROBOT == 1 ? 2 : 3) //2
-#define centre_I (ROBOT == 1 ? 0 : 0)
-#define centre_D (ROBOT == 1 ? 0.02 : 0.02) //0.05
+#define DEFEND_P (ROBOT == 1 ? 0.45 : 0.5) //Whatever works <D
+#define DEFEND_I (ROBOT == 1 ? 0 : 0)
+#define DEFEND_D (ROBOT == 1 ? 0.12 : 0.5) //High D
 
-#define SIDEWAY_P (ROBOT == 1 ? 3 : 2) 
+#define SIDEWAY_P (ROBOT == 1 ? 2.5 : 2) 
 #define SIDEWAY_I (ROBOT == 1 ? 0 : 0)
-#define SIDEWAY_D (ROBOT == 1 ? 0 : 0.001) //No D
+#define SIDEWAY_D (ROBOT == 1 ? 0.03 : 0) //No D
 
-#define defend_P (ROBOT == 1 ? 1 : 0.5) //Whatever works <D
-#define defend_I (ROBOT == 1 ? 0 : 0)
-#define defend_D (ROBOT == 1 ? 1.5 : 1) //High D
+#define FIELD_P (ROBOT == 1 ? 0.3 : 0.3) 
+#define FIELD_I (ROBOT == 1 ? 0 : 0)
+#define FIELD_D (ROBOT == 1 ? 0 : 0)
 
-#define forward_P (ROBOT == 1 ? 10 : 10) 
-#define forward_I (ROBOT == 1 ? 0 : 0)
-#define forward_D (ROBOT == 1 ? 0 : 0.01) //No D
+#define SEARCH_P FIELD_P*10 
+#define SEARCH_I (ROBOT == 1 ? 0 : 0)
+#define SEARCH_D (ROBOT == 1 ? 0 : 0)
 
-#define BALL_CLOSE_STRENGTH (ROBOT == 1 ? 100 : 90)
-#define ATT_MULT (ROBOT == 1? 0.00075: 0.08)
-#define DEF_MULT (ROBOT == 1? 0.1: 5)
-#define VIS_TIMER 200000
-
-
-#define ARRAYSHIFTDOWN(a, lower, upper){          \
-	if (upper == (sizeof(a)/sizeof(a[0])) - 1){   \
-		for (int q = upper - 1; q >= lower; q--){ \
-			*(a + q + 1) = *(a + q); }            \
-	} else{                                       \
-		for (int q = upper; q >= lower; q--){     \
-			*(a + q + 1) = *(a + q); }}}
-
-float floatMod(float x, float m);
-
-uint8_t mod(int8_t x, int8_t m);
-
-float angleBetween(float angleCounterClockwise, float angleClockwise);
-
-float smallestAngleBetween(float angleCounterClockwise, float angleClockwise);
-
-int8_t findSign(float value);
-
-float midAngleBetween(float angleCounterClockwise, float angleClockwise);
-
-float smallestAngleBetween(float angleCounterClockwise, float angleClockwise);
-
-int8_t findSign(float value);
-
-bool angleIsInside(float angleBoundCounterClockwise, float angleBoundClockwise, float angleCheck);
+#define LINE_P STRIKE_SPEED*10
+#define LINE_I 0
+#define LINE_D 0
+#define VIS_TIMER 250000
+#define IDLE_TIMER 2000000
+#define SEARCH_TIMER IDLE_TIMER*2
 
 #define LS_NUM 32
 #define LS_NUM_IND 16
-#define LINE_BUFFER (ROBOT == 1 ? 200 : 400)
-#define LS_AVOID_MEDIUM (ROBOT == 1 ? 220  : 255)
-#define LS_AVOID_FAST (ROBOT == 1 ? 255  : 255)
+#define LINE_BUFFER (ROBOT == 1 ? 100 : 400)
 #define LS_CALIBRATE_COUNT 16
 #define LS_OFFSET 180
 #define LS_CONTROL_NUM 4
@@ -153,10 +126,18 @@ bool angleIsInside(float angleBoundCounterClockwise, float angleBoundClockwise, 
 
 #define CAMERA_BAUD 9600
 #define blueAttack 1
-#define EDGESPEED 75
+#define LRF_NUM 8
+#define LRF_RAD 80
+#define FIELD_LENGTH 243
+#define FIELD_WIDTH 182
+#define LINE_LOC_X 60
+#define LINE_LOC_Y 100
+#define LRF_THRESHOLD 15
+#define CHANGE_THRESH 500
+#define MAX_CHANGE_THRESH 15
 
-#define SHOOT_ANGLE (ROBOT == 1? 3 : 2.5) 
-#define DEFEND_DIST (ROBOT == 1? 55.0 : 90.0) 
+#define SHOOT_ANGLE (ROBOT == 1? 2 : 2) 
+#define DEFEND_DIST (ROBOT == 1? 30.0 : 40.0) 
 #define DEFENSE_SUGRE_SPEED 255
 #define DEFENSE_SURGE_STRENGTH 15
 #define SURGE_MAX_TIME 1000000
@@ -165,21 +146,52 @@ bool angleIsInside(float angleBoundCounterClockwise, float angleBoundClockwise, 
 #define KICK_DELAY_TIME 100000
 #define KICK_DISCHARGE_TIME 50000 
 #define KICK_CHARGE_TIME 5000000
+#define SPEED_MIN (1000)                                  
+#define SPEED_MAX (1200) 
 
 #define BLUETOOTH_BAUD 9600
 #define DISCONNECTED_TIMER 1000000
 #define CONNECTED_TIMER 200000
 #define BT_UPDATE_TIME 100000
 #define BT_START_BYTE 255
-#define BT_PACKET_SIZE 4
+#define BT_PACKET_SIZE 7
 #define BT_SEND_TIMER 100000
 #define BT_SWITCH_TIMER 4000
 #define SWITCH_STRENGTH_DIFF 150
 #define DEFENSE_MODE 0
 #define ATTACK_MODE 1
 
+#define ARRAYSHIFTDOWN(a, lower, upper){          \
+	if (upper == (sizeof(a)/sizeof(a[0])) - 1){   \
+		for (int q = upper - 1; q >= lower; q--){ \
+			*(a + q + 1) = *(a + q); }            \
+	} else{                                       \
+		for (int q = upper; q >= lower; q--){     \
+			*(a + q + 1) = *(a + q); }}}
+
+float floatMod(float x, float m);
+
+uint8_t mod(int8_t x, int8_t m);
+
+float angleBetween(float angleCounterClockwise, float angleClockwise);
+
+float smallestAngleBetween(float angleCounterClockwise, float angleClockwise);
+
+int8_t findSign(float value);
+
+float midAngleBetween(float angleCounterClockwise, float angleClockwise);
+
+float smallestAngleBetween(float angleCounterClockwise, float angleClockwise);
+
+int8_t findSign(float value);
+
+bool angleIsInside(float angleBoundCounterClockwise, float angleBoundClockwise, float angleCheck);
+
 struct BluetoothData{
-	int ballStrSurge;
+	int robotX;
+	int robotY;
+	int ballX;
+	int ballY;
 	int role;
 };
 

@@ -12,6 +12,7 @@ class Kicker {
         void init();
         bool kicked = false;
         bool shouldKick = false;
+        bool kicking = false;
         Timer kickDelay = Timer((unsigned long)KICK_DELAY_TIME);
     private:
         bool triggered = false;

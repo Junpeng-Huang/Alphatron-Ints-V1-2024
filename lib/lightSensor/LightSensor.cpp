@@ -19,84 +19,75 @@ void LightSensor::init()
         }
         threshold[i] = (uint16_t)(calibrateTotal /(LS_CALIBRATE_COUNT)) + LINE_BUFFER;
     }
+    for (uint8_t i = 0; i < LS_NUM; i++) {
+        vector[i] = Vect(ls_x[i], ls_y[i], false); //Check
+    }
 }
 
 void LightSensor::update()
 {
     read();
     uint8_t clusterNum = 0;
+    uint8_t lsInCluster[4] = {0};
     bool inCluster = false;
-    uint8_t start[4] = {0};
-    uint8_t end[4] = {0};
+    Vect cluster[4];
 
-    for (uint8_t i = 0; i < LS_NUM; i++) { // reads sensors
+    for (uint8_t i = 0; i < LS_NUM; i++) { 
         if (!inCluster) {
             if (white[i]) {
                 inCluster = true;
-                start[clusterNum] = i;
-            }
+                cluster[clusterNum] += vector[i];
+                lsInCluster[clusterNum]++;
+            } //Sets as start
         } else {
-            if (!white[i]) {
+            if (white[i]) {
+                cluster[clusterNum] += vector[i];
+                lsInCluster[clusterNum]++;
+            } else {
                 inCluster = false;
-                end[clusterNum] = i;
+                cluster[clusterNum] /= lsInCluster[clusterNum];
                 clusterNum++;
-            }
+            } //Ends & records cluster
         }
     }
-    if (white[LS_NUM-1]) {
+    if (white[LS_NUM-1]) { //LS31 -> LS0 Case
         if(white[0]) {
-            start[0] = start[clusterNum];
+            cluster[0] = (cluster[0]*lsInCluster[0] + cluster[clusterNum])/(lsInCluster[0] + lsInCluster[clusterNum]); 
         } else {
-            end[clusterNum] = LS_NUM-1;
+            cluster[clusterNum] /= lsInCluster[clusterNum];
             clusterNum++;
-        }
+        } 
     }
 
-    Vect cluster[4];
-    for (uint8_t i; i < clusterNum; i++) {
-        // calculater the vector of individual clusters
-    }
-
-
-
-    switch (clusterNum) {
-    case 0:
-        line = Vect();
-        break;
-    case 1:
-        line = cluster[1];
-        break;
-    case 2:
-        if (angleBetween(clusterArray[1].midpoint, clusterArray[0].midpoint) <= 180) {
-            lineAngle = 360 - floatMod(midAngleBetween(clusterArray[1].midpoint, clusterArray[0].midpoint) - LS_OFFSET, 360);
-        } else {
-            lineAngle = 360 - floatMod(midAngleBetween(clusterArray[0].midpoint, clusterArray[1].midpoint) - LS_OFFSET, 360);
-        }
-        break;
-    case 3:
-        float angleDiff12 = angleBetween(clusterArray[1].midpoint, clusterArray[0].midpoint);
-        float angleDiff23 = angleBetween(clusterArray[2].midpoint, clusterArray[1].midpoint);
-        float angleDiff31 = angleBetween(clusterArray[0].midpoint, clusterArray[2].midpoint);
+    if (clusterNum == 0) {
+        line = Vect(); 
+    } else if (clusterNum == 3) {
+        float angleDiff12 = angleBetween(cluster[0].arg, cluster[1].arg);
+        float angleDiff23 = angleBetween(cluster[1].arg, cluster[2].arg);
+        float angleDiff31 = angleBetween(cluster[2].arg, cluster[0].arg);
         float biggestAngle = fmax(angleDiff12, fmax(angleDiff23, angleDiff31));
         if (biggestAngle == angleDiff12) {
-            lineAngle = 360 - floatMod(midAngleBetween(clusterArray[0].midpoint, clusterArray[1].midpoint) + LS_OFFSET, 360);
+            line = cluster[2];
         } else if (biggestAngle == angleDiff23) {
-            lineAngle = 360 - floatMod(midAngleBetween(clusterArray[1].midpoint, clusterArray[2].midpoint) + LS_OFFSET, 360);
+            line = cluster[0];
         } else {
-            lineAngle = 360 - floatMod(midAngleBetween(clusterArray[2].midpoint, clusterArray[0].midpoint) + LS_OFFSET, 360);
+            line = cluster[1];
         }
-        break;
+    } else if (clusterNum == 2) {
+        line = (cluster[0] + cluster[1])/2;
+    } else if (clusterNum == 1) {
+        line = cluster[0];
     }
-
-    return lineAngle;
+    onLine = clusterNum != 0;
 }
 
 void LightSensor::debug()
 {
-    read();
+    update();
+
     for (int i = 0; i < LS_NUM; i++)
     {
-        if (read[i] > 15)
+        if (value[i] > 15)
         {
             broke = false;
         }
@@ -107,25 +98,25 @@ void LightSensor::debug()
         }
     }
 
-    // for (int j = 0; j < LS_NUM; j++) {
-    //     if (value[j] >= ls_cal[j]) {
-    //         white[j] = 1;
-    //     } else {
-    //         white[j] = 0;
-    //     }
-    //     Serial.print(white[j]);
-    //     Serial.print(" ");
-    // }
-    // Serial.println(" ");
+    for (int j = 0; j < LS_NUM; j++) {
+        Serial.print(white[j]);
+        Serial.print(" ");
+    }
+    Serial.print(" ");
+    // Serial.print(clusterNum);
+    // Serial.print("\t");
+    // Serial.print(lineDir);
+    // Serial.print("\t");
+    // Serial.println(lineWidth);
 
     // Serial.println(read[19]);
 
-    for(int i=0; i<32; i++){
-        Serial.print(value[i]);
-        Serial.print(" ");
-    }
-    Serial.println(" ");
-    delay(50);
+    // for(int i=0; i<32; i++){
+    //     Serial.print(value[i]);
+    //     Serial.print(" ");
+    // }
+    // Serial.println(" ");
+    // delay(50);
 }
 
 void LightSensor::read()
@@ -142,8 +133,8 @@ void LightSensor::read()
         }
     }
     for (uint8_t i = 0; i < LS_NUM; i++) {
-        if(white[mod(i+1, LS_NUM)] == white[mod(i-1, LS_NUM)]) {
-            white[i] = white[mod(i+1, LS_NUM)]; //Change to just white possibly
+        if(white[mod(i+1, LS_NUM)] && white[mod(i-1, LS_NUM)]) {
+            white[i] = true;
         } 
     }
 }

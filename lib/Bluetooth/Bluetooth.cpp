@@ -4,8 +4,11 @@ void Bluetooth::init() {
     Serial5.begin(BLUETOOTH_BAUD);
 }
 
-void Bluetooth::update(float ballStrSurge){ 
-    thisData.ballStrSurge = (uint8_t)ballStrSurge;
+void Bluetooth::update(float ballX, float ballY, float robotX, float robotY){ 
+    thisData.ballX = (uint8_t)ballX;
+    thisData.ballY = (uint8_t)ballY;
+    thisData.robotX = (uint8_t)robotX;
+    thisData.robotY = (uint8_t)robotY;
     if(sendTimer.timeHasPassed()) {
         send();
     }
@@ -27,7 +30,10 @@ void Bluetooth::update(float ballStrSurge){
 void Bluetooth::send(){
     Serial5.write(BT_START_BYTE);
     Serial5.write(BT_START_BYTE);
-    Serial5.write(thisData.ballStrSurge);
+    Serial5.write(thisData.ballX);
+    Serial5.write(thisData.ballY);
+    Serial5.write(thisData.robotX);
+    Serial5.write(thisData.robotY);
     Serial5.write(thisData.role);
 }
 
@@ -41,10 +47,13 @@ void Bluetooth::receive(){
             for(uint8_t i = 0; i < BT_PACKET_SIZE - 2; i++) {
                 buffer[i] = Serial5.read();
             }
-            connectedTimer.update();
-            otherData.ballStrSurge = buffer[0];
+            connectedTimer.resetTime();
+            otherData.ballX = buffer[0];
+            otherData.ballY = buffer[1];
+            otherData.robotX = buffer[2];
+            otherData.robotY = buffer[3];
             bool roleBefore = otherData.role;
-            otherData.role = buffer[1] == DEFENSE_MODE ? DEFENSE_MODE : ATTACK_MODE;
+            otherData.role = buffer[4] == DEFENSE_MODE ? DEFENSE_MODE : ATTACK_MODE;
             if(!roleBefore && otherData.role){
                 if(otherData.role == thisData.role){
                     isSwitching = true;
@@ -52,29 +61,24 @@ void Bluetooth::receive(){
             } else if(otherData.role == thisData.role){
                 isSwitching = true;
             }
-            // Serial.print(otherData.ballStrSurge);
-            // Serial.print("  ");
-            // Serial.print(otherData.role);
-            // Serial.print("  ");
-            // Serial.print(thisData.ballStrSurge);
-            // Serial.print("  ");
-            // Serial.print(thisData.role);
-            // Serial.println("  ");
-            // Serial.println(thisData.ballStrSurge-otherData.ballStrSurge);
         }
     }
 }
 
 void Bluetooth::decideRole() {
+    thisBall = Vect(thisData.ballX, thisData.ballY, false);
+    otherBall = Vect(otherData.ballX, otherData.ballY, false);
+    thisRobot = Vect(thisData.robotX, thisData.robotY, false);
+    otherRobot = Vect(otherData.robotX, otherData.robotY, false);
+
     if(thisData.role == DEFENSE_MODE){
-        if(thisData.ballStrSurge > DEFENSE_SURGE_STRENGTH){
+        if(thisBall.mag < DEFENSE_SURGE_STRENGTH){
             thisData.role = ATTACK_MODE;
-        // } else if(thisData.ballStrSurge-otherData.ballStrSurge >= 100) {
-        //     thisData.role = ATTACK_MODE;
+        } else if(otherBall.mag - thisBall.mag >= 40) {
+            thisData.role = ATTACK_MODE;
         }
         if ((thisData.role == otherData.role)){
-            if(thisData.ballStrSurge > otherData.ballStrSurge){
-                // Serial.print("Checking this");
+            if((thisBall.mag < otherBall.mag) && thisBall.exists()){
                 thisData.role = ATTACK_MODE;
             } else{
                 thisData.role = DEFENSE_MODE;
@@ -84,12 +88,12 @@ void Bluetooth::decideRole() {
     if (!isConnected){
         thisData.role = DEFENSE_MODE;
         otherData.role = -1;
-        otherData.ballStrSurge = 0;
+        otherBall = Vect();
         sameRole = 0;
     } else if (isSwitching){
         thisData.role = !thisData.role;
         isSwitching = false;
-        switchTimer.update();
+        switchTimer.resetTime();
         sameRole = 0;
     }
 }
