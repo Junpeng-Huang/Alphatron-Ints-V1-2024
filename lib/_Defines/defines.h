@@ -9,13 +9,14 @@
 #define RAD2DEG (180/3.141592)
 #define MOTOR_NO 4
 
-#define ROBOT 1
-#define ORBIT_FAR_SPEED (ROBOT == 1 ? 100 : 80)
-#define ORBIT_CLOSE_SPEED (ROBOT == 1 ? 30 : 30)
+#define ROBOT 2
+#define ORBIT_FAR_SPEED (ROBOT == 1 ? 120 : 120)
+#define ORBIT_CLOSE_SPEED (ROBOT == 1 ? 60 : 60)
 #define CAPTURE_SPEED (ROBOT == 1 ? 25 : 30)
-#define ORBIT_STRIKE_ANGLE (ROBOT == 1 ? 5 : 10) 
-#define CAPTURE_DIST (ROBOT == 1 ? 7 : 9)
-#define DIST_BEHIND_BALL (ROBOT == 1 ? 25 : 25)
+#define ORBIT_STRIKE_ANGLE (ROBOT == 1 ? 5 : 5) 
+#define CAPTURE_DIST (ROBOT == 1 ? 8 : 9)
+#define DIST_BEHIND_BALL (ROBOT == 1 ? 30.0 : 40.0)
+#define MIN_DIST (ROBOT == 1 ? 20.0 : 25.0)
 #define STRIKE_SPEED ORBIT_FAR_SPEED
 #define HOMING_SPEED (ROBOT == 1 ? 80 : 80)
 
@@ -25,25 +26,25 @@
 
 #define CAMERA_P (ROBOT == 1 ? 0.45 : 0.45) 
 #define CAMERA_I (ROBOT == 1 ? 0 : 0)
-#define CAMERA_D (ROBOT == 1 ? 0.15 : 0.1) //No D
+#define CAMERA_D (ROBOT == 1 ? 0.15 : 0.15) //No D
 
-#define DEFEND_P (ROBOT == 1 ? 0.45 : 0.5) //Whatever works <D
+#define DEFEND_P (ROBOT == 1 ? 0.5 : 0.5) //Whatever works <D
 #define DEFEND_I (ROBOT == 1 ? 0 : 0)
-#define DEFEND_D (ROBOT == 1 ? 0.12 : 0.5) //High D
+#define DEFEND_D (ROBOT == 1 ? 0.12 : 0.12) //High D
 
-#define SIDEWAY_P (ROBOT == 1 ? 2.5 : 2) 
+#define SIDEWAY_P (ROBOT == 1 ? 15 : 15) 
 #define SIDEWAY_I (ROBOT == 1 ? 0 : 0)
-#define SIDEWAY_D (ROBOT == 1 ? 0.03 : 0) //No D
+#define SIDEWAY_D (ROBOT == 1 ? 0.2 : 0.2) //No D
 
 #define FIELD_P (ROBOT == 1 ? 0.3 : 0.3) 
 #define FIELD_I (ROBOT == 1 ? 0 : 0)
 #define FIELD_D (ROBOT == 1 ? 0 : 0)
 
-#define SEARCH_P FIELD_P*10 
+#define SEARCH_P FIELD_P*20 
 #define SEARCH_I (ROBOT == 1 ? 0 : 0)
 #define SEARCH_D (ROBOT == 1 ? 0 : 0)
 
-#define LINE_P STRIKE_SPEED*10
+#define LINE_P ORBIT_FAR_SPEED*10
 #define LINE_I 0
 #define LINE_D 0
 #define VIS_TIMER 250000
@@ -52,11 +53,12 @@
 
 #define LS_NUM 32
 #define LS_NUM_IND 16
-#define LINE_BUFFER (ROBOT == 1 ? 100 : 400)
+#define LINE_BUFFER (ROBOT == 1 ? 200 : 400)
 #define LS_CALIBRATE_COUNT 16
 #define LS_OFFSET 180
 #define LS_CONTROL_NUM 4
 #define LS_MUX_NUM 2
+#define T_MULT 180
 
 #define LS_X_0  0
 #define LS_X_1  0.195090322016
@@ -126,20 +128,21 @@
 
 #define CAMERA_BAUD 9600
 #define blueAttack 1
-#define LRF_NUM 8
+#define LRF_NUM 10
 #define LRF_RAD 80
 #define FIELD_LENGTH 243
 #define FIELD_WIDTH 182
-#define LINE_LOC_X 60
+#define LINE_LOC_X 100
 #define LINE_LOC_Y 100
 #define LRF_THRESHOLD 15
 #define CHANGE_THRESH 500
 #define MAX_CHANGE_THRESH 15
 
 #define SHOOT_ANGLE (ROBOT == 1? 2 : 2) 
-#define DEFEND_DIST (ROBOT == 1? 30.0 : 40.0) 
+#define DEFEND_DIST (ROBOT == 1? 27.5 : 45.0) 
+#define DEFEND_DIST_0 15
 #define DEFENSE_SUGRE_SPEED 255
-#define DEFENSE_SURGE_STRENGTH 15
+#define DEFENSE_SURGE_STRENGTH 20
 #define SURGE_MAX_TIME 1000000
 
 #define KICK_BALL_STR 300
@@ -147,7 +150,7 @@
 #define KICK_DISCHARGE_TIME 50000 
 #define KICK_CHARGE_TIME 5000000
 #define SPEED_MIN (1000)                                  
-#define SPEED_MAX (1200) 
+#define SPEED_MAX (1600) 
 
 #define BLUETOOTH_BAUD 9600
 #define DISCONNECTED_TIMER 1000000

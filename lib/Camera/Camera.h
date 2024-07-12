@@ -24,18 +24,14 @@ public:
     Vect ball;
 
 private:
-    float ballPixeltoCM(float dist);
-    float goalPixeltoCM(float dist);
+    Vect ballPixeltoCM(Vect ball);
+    Vect goalPixeltoCM(Vect goal);
     float prevAngY;
     float prevDistY;
     float prevAngB;
     float prevDistB;
     float prevAngBall;
     float prevDistBall;
-    float yellowAngle;
-    float yellowDist;
-    float blueAngle;
-    float blueDist;
     Vect blueGoal;
     Vect prevBlue;
     Vect yellowGoal;

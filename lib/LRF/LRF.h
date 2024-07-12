@@ -19,21 +19,22 @@ class LRF {
         float bestPosY = 0;
 	private:
         const uint8_t sensorCount = LRF_NUM;
-        const uint8_t xshutPins[uint8_t(LRF_NUM)] = {0, 5, 8, 10, 11, 26, 40, 41};
+        const uint8_t xshutPins[uint8_t(LRF_NUM)] = {6, 5, 4, 3, 2, 10, 11, 9, 8, 7};        
         VL53L1X sensors[uint8_t(LRF_NUM)];
         int sensorRad = LRF_RAD;
         float fieldLen = FIELD_LENGTH;
         float fieldWid = FIELD_WIDTH;
         float thresh = LRF_THRESHOLD;
+        int LRFangles[10] = {20, 60, 90, 120, 160, 200, 240, 270, 300, 340};
         int tryNewX = 0;
         int tryNewY = 0;
         bool triedNewX = false;
         bool triedNewY = false;
         int tryNewThresh = CHANGE_THRESH;
         float maxChange = MAX_CHANGE_THRESH;
-        bool lrfLocalise[8] = {true};
-        float posX[8] = {0};
-        float posY[8] = {0};
+        float posX[LRF_NUM] = {0};
+        float posY[LRF_NUM] = {0};
+        bool deadSense[LRF_NUM] = {0};
         float prevposX = 0;
         float prevposY = 0;
 };

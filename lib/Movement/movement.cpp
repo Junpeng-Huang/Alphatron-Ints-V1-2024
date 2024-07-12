@@ -9,9 +9,10 @@ Movement::Movement(){
 }
 
 void Movement::move(Vect move, int rotation, float heading){
-    float a = move.mag * sinf(DEG2RAD * (move.arg - 45 - heading));
-    float b = -move.mag * sinf(DEG2RAD * (move.arg - 135 - heading));
-    float values[4] = {rotation + a, rotation + b, rotation - a, rotation - b};
+    float values[4] = {0};
+    for (uint8_t i = 0; i < MOTOR_NO; i++) {
+        values[i] = move.mag*cosf(DEG2RAD*(move.arg + 90 - motor_angle[i] + heading)) + rotation;
+    }
     float maxVal = max(max(max(abs(values[0]), abs(values[1])), abs(values[2])), values[3]);
     if(maxVal > 255){
         for(int i = 0; i < MOTOR_NO; i++) {

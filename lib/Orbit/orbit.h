@@ -11,13 +11,16 @@
 class Orbit {
     public:
         struct OrbitData{
-            Vect ball;
+            Vect ballVect;
         };
         Orbit() {};
         OrbitData update(Vect ball);
     private:
         Vect b;
-        Vect offset;
+        float offset;
+        float prevOffset;
+        Vect ballVect;
+
 };
 
 #endif

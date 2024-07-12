@@ -5,12 +5,14 @@ void Bluetooth::init() {
 }
 
 void Bluetooth::update(float ballX, float ballY, float robotX, float robotY){ 
-    thisData.ballX = (uint8_t)ballX;
-    thisData.ballY = (uint8_t)ballY;
-    thisData.robotX = (uint8_t)robotX;
-    thisData.robotY = (uint8_t)robotY;
     if(sendTimer.timeHasPassed()) {
-        send();
+        Serial5.write(BT_START_BYTE);
+        Serial5.write(BT_START_BYTE);
+        Serial5.write((uint8_t)ballX);
+        Serial5.write((uint8_t)ballY);
+        Serial5.write((uint8_t)robotX);
+        Serial5.write((uint8_t)robotY);
+        Serial5.write(thisData.role);
     }
     receive();
     decideRole();
@@ -25,16 +27,6 @@ void Bluetooth::update(float ballX, float ballY, float robotX, float robotY){
     // }
 
     // Serial.println(thisData.role);
-}
-
-void Bluetooth::send(){
-    Serial5.write(BT_START_BYTE);
-    Serial5.write(BT_START_BYTE);
-    Serial5.write(thisData.ballX);
-    Serial5.write(thisData.ballY);
-    Serial5.write(thisData.robotX);
-    Serial5.write(thisData.robotY);
-    Serial5.write(thisData.role);
 }
 
 void Bluetooth::receive(){

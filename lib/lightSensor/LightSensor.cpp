@@ -24,13 +24,14 @@ void LightSensor::init()
     }
 }
 
-void LightSensor::update()
+void LightSensor::update(float defendAngle)
 {
     read();
     uint8_t clusterNum = 0;
     uint8_t lsInCluster[4] = {0};
     bool inCluster = false;
     Vect cluster[4];
+    TSection = false;
 
     for (uint8_t i = 0; i < LS_NUM; i++) { 
         if (!inCluster) {
@@ -62,6 +63,7 @@ void LightSensor::update()
     if (clusterNum == 0) {
         line = Vect(); 
     } else if (clusterNum == 3) {
+        TSection = true;
         float angleDiff12 = angleBetween(cluster[0].arg, cluster[1].arg);
         float angleDiff23 = angleBetween(cluster[1].arg, cluster[2].arg);
         float angleDiff31 = angleBetween(cluster[2].arg, cluster[0].arg);
@@ -74,16 +76,22 @@ void LightSensor::update()
             line = cluster[1];
         }
     } else if (clusterNum == 2) {
-        line = (cluster[0] + cluster[1])/2;
+        if (abs(lsInCluster[1] - lsInCluster[0]) > 3 && angleIsInside(170, 205, angleBetween(cluster[0].arg, cluster[1].arg)) && !angleIsInside(125, 235, defendAngle)) {
+            line = (lsInCluster[1] > lsInCluster[0] ? cluster[1] : cluster[0]);
+            TSection = true;
+        } else {
+            line = (cluster[0] + cluster[1])/2;
+        }
     } else if (clusterNum == 1) {
         line = cluster[0];
     }
-    onLine = clusterNum != 0;
+    lineDir = (clusterNum != 0 ? line.arg : -1);
+    lineWidth = line.mag;
 }
 
 void LightSensor::debug()
 {
-    update();
+    update(0);
 
     for (int i = 0; i < LS_NUM; i++)
     {
